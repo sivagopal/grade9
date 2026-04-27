@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}AI Marking | GCSE Grade 9 Planner{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div class="eyebrow">AI Marking</div>
+  <h1>Upload worked responses and get structured feedback back fast.</h1>
+  <p>The marking view is designed for scanned papers, mark schemes, and next-step diagnosis so recovery work can happen immediately after a test.</p>
+</section>
+
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>Upload and mark</h2>
+      <p class="small">OpenAI is only called when you submit the form</p>
+    </div>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="form-stack">
+    <label>Scan/photo/PDF <input type="file" name="scan" accept=".png,.jpg,.jpeg,.pdf"></label>
+    <label>Paste the test or mark scheme here
+      <textarea name="mark_scheme" rows="12" placeholder="Paste your test and mark scheme..."></textarea>
+    </label>
+    <button type="submit">Mark scanned answers</button>
+  </form>
+</section>
+
+{% if feedback %}
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>Feedback</h2>
+      <p class="small">AI-marked response summary</p>
+    </div>
+  </div>
+  <pre>{{ feedback }}</pre>
+</section>
+{% endif %}
+{% endblock %}

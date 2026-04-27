@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}GCSE Grade 9 Planner{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <a class="brand-mark" href="{{ url_for('main.index') }}">G9</a>
+        <div>
+          <a class="brand-title" href="{{ url_for('main.index') }}">GCSE Grade 9 Planner</a>
+          <p class="brand-subtitle">Interactive study system for stretch-level Year 8 learning</p>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a href="{{ url_for('main.index') }}">Dashboard</a>
+        <a href="{{ url_for('main.log_day') }}">Daily Log</a>
+        <a href="{{ url_for('main.test_page') }}">Tests</a>
+        <a href="{{ url_for('main.question_bank_page') }}">Question Bank</a>
+        <a href="{{ url_for('main.report') }}">Report</a>
+        <a href="{{ url_for('main.mark') }}">AI Marking</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Tests | GCSE Grade 9 Planner{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div class="eyebrow">Adaptive Assessment</div>
+  <h1>Run tests that feel curated, visual, and progressively more demanding.</h1>
+  <p>Generate local or live papers, surface topic mastery instantly, and feed the result back into the adaptive engine so the next session becomes more precise.</p>
+</section>
+
+<div class="grid">
+  <section class="card narrow">
+    <div class="card-header">
+      <div>
+        <h2>Generate test</h2>
+        <p class="small">Choose source, length, and subject focus</p>
+      </div>
+    </div>
+    <form method="post" class="form-stack">
+      <label>Test type
+        <select name="test_type">
+          <option value="daily_all" {% if test_type == 'daily_all' %}selected{% endif %}>Daily test for all subjects</option>
+          <option value="subject_mini" {% if test_type == 'subject_mini' %}selected{% endif %}>Mini test for one subject</option>
+        </select>
+      </label><br><br>
+      <label>Subject
+        <select name="subject">
+          {% for subject in subjects %}
+          <option value="{{ subject }}" {% if subject == selected_subject %}selected{% endif %}>{{ subject }}</option>
+          {% endfor %}
+        </select>
+      </label><br><br>
+      <label>Source
+        <select name="source">
+          <option value="local" {% if source == 'local' %}selected{% endif %}>Local question bank</option>
+          <option value="openai" {% if source == 'openai' %}selected{% endif %}>OpenAI</option>
+        </select>
+      </label><br><br>
+      <label>Duration in minutes
+        <input type="number" name="duration" min="5" max="120" value="{{ duration }}">
+      </label><br><br>
+      <label>Questions
+        <input type="number" name="count" min="1" max="30" value="{{ question_count }}">
+      </label>
+      <div class="button-row">
+        <button type="submit">Generate test</button>
+        <a class="button secondary" href="{{ url_for('main.download_test', test_type=test_type, subject=selected_subject, source=source, duration=duration, count=question_count, format='md') }}">Download .md</a>
+        <a class="button secondary" href="{{ url_for('main.download_test', test_type=test_type, subject=selected_subject, source=source, duration=duration, count=question_count, format='pdf') }}">Download PDF</a>
+      </div>
+    </form>
+    <p class="small">Use `Daily test for all subjects` for the mixed daily paper. Use `Mini test for one subject` for a 30-minute subject paper. For local tests, the app uses the SQLite bank. For OpenAI tests, it generates the paper live.</p>
+    <p class="small">PDF export is designed for local tests so plotted diagrams and layout can be embedded directly.</p>
+    <p class="small">OpenAI status: {% if openai_enabled %}configured{% else %}not configured{% endif %}</p>
+  </section>
+
+  <section class="card wide">
+    <div class="card-header">
+      <div>
+        <h2>{{ selected_subject }} progress</h2>
+        <p class="small">Mastery snapshot for the active subject</p>
+      </div>
+    </div>
+    <div class="score">{{ progress.subject_score }}/100</div>
+    {% if progress.next_focus %}
+    <p><span class="badge">Next focus: {{ progress.next_focus.topic }}</span></p>
+    <p>Recommended difficulty: {{ progress.next_focus.target_difficulty }}</p>
+    {% endif %}
+    <p>Stored questions: {{ progress.question_total }}</p>
+  </section>
+
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Topic mastery</h2>
+        <p class="small">The recommendation engine uses this table to decide what to serve next</p>
+      </div>
+    </div>
+    {% if progress.topics %}
+    <table>
+      <tr>
+        <th>Topic</th>
+        <th>Mastery</th>
+        <th>Attempts</th>
+        <th>Next difficulty</th>
+        <th>Status</th>
+      </tr>
+      {% for item in progress.topics %}
+      <tr>
+        <td>{{ item.topic }}</td>
+        <td>{{ item.mastery }}%</td>
+        <td>{{ item.attempts }}</td>
+        <td>{{ item.target_difficulty }}</td>
+        <td>{% if item.secure %}Secure{% else %}Still building{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p>No subject data yet. Generate a test or import more questions.</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if questions and test_type == 'subject_mini' and source == 'local' %}
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>{{ selected_subject }} question set</h2>
+      <p class="small">A more visual paper layout for plotted and high-difficulty items</p>
+    </div>
+  </div>
+  {% for q in questions %}
+  <article class="question-card">
+    <p><strong>{{ loop.index }}.</strong> <span class="badge">{{ q.topic }}</span> Difficulty {{ q.difficulty_level }} | {{ q.marks }} marks</p>
+    <p>{{ q.question }}</p>
+    {% if q.asset_path %}
+    <img class="question-figure" src="{{ url_for('static', filename=q.asset_path) }}" alt="Diagram for question {{ loop.index }}">
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if questions and test_type == 'subject_mini' and source == 'local' %}
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>Record marks after the test</h2>
+      <p class="small">Submitting marks updates difficulty targeting and retires attempted questions by default</p>
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('main.submit_test_results') }}">
+    <input type="hidden" name="subject" value="{{ selected_subject }}">
+    <table>
+      <tr>
+        <th>#</th>
+        <th>Topic</th>
+        <th>Difficulty</th>
+        <th>Question</th>
+        <th>Score</th>
+      </tr>
+      {% for q in questions %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ q.topic }}</td>
+        <td>{{ q.difficulty_level }}</td>
+        <td>{{ q.question }}</td>
+        <td>
+          <input type="hidden" name="question_id" value="{{ q.id }}">
+          <input type="number" name="score" min="0" max="{{ q.marks }}" step="0.5" value="0">
+          <div class="small">out of {{ q.marks }}</div>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="button-row" style="margin-top: 18px;">
+      <button type="submit">Save scores</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+{% if review_items %}
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>Wrong-answer review</h2>
+      <p class="small">Explanation, adjacent challenge areas, and video-led follow-up</p>
+    </div>
+  </div>
+  {% for item in review_items %}
+  <article class="review-card">
+    <p><strong>{{ loop.index }}.</strong> <span class="badge">{{ item.topic }}</span> Score {{ item.score }}/{{ item.max_score }}</p>
+    <p>{{ item.question }}</p>
+    {% if item.asset_path %}
+    <img class="question-figure" src="{{ url_for('static', filename=item.asset_path) }}" alt="Diagram for reviewed question {{ loop.index }}">
+    {% endif %}
+    <p><strong>Correct answer:</strong> {{ item.answer }}</p>
+    <p><strong>Explanation:</strong> {{ item.explanation }}</p>
+    <p><strong>Video explanation script:</strong></p>
+    <ol>
+      {% for step in item.video_script %}
+      <li>{{ step }}</li>
+      {% endfor %}
+    </ol>
+    <p><strong>Related advanced areas:</strong> {{ item.related_areas | join(', ') }}</p>
+    <p><strong>Suggested videos:</strong></p>
+    <ul>
+      {% for name, url in item.videos %}
+      <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ name }}</a></li>
+      {% endfor %}
+    </ul>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if test_markdown %}
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>Printable paper view</h2>
+      <p class="small">Markdown export for offline use</p>
+    </div>
+  </div>
+  <pre>{{ test_markdown }}</pre>
+</section>
+{% endif %}
+{% endblock %}

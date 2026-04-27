@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Question Bank | GCSE Grade 9 Planner{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div class="eyebrow">Question Infrastructure</div>
+  <h1>Grow the bank like a living curriculum, not a static worksheet folder.</h1>
+  <p>Generate stronger prompts, monitor topic coverage, import structured content, and keep the adaptive engine supplied with high-discrimination questions.</p>
+</section>
+
+<div class="grid">
+  <section class="card narrow">
+    <div class="card-header">
+      <div>
+        <h2>Generate prompt</h2>
+        <p class="small">Build stronger, topic-aware generation requests</p>
+      </div>
+    </div>
+    <form method="post" class="form-stack">
+      <input type="hidden" name="action" value="generate-prompt">
+      <label>Subject
+        <select name="subject">
+          {% for subject in subjects %}
+          <option value="{{ subject }}" {% if subject == selected_subject %}selected{% endif %}>{{ subject }}</option>
+          {% endfor %}
+        </select>
+      </label><br><br>
+      <label>Academic year
+        <input type="number" name="academic_year" min="7" max="13" value="{{ academic_year }}">
+      </label><br><br>
+      <label>Question target
+        <input type="number" name="question_target" min="1" max="300" value="{{ question_target }}">
+      </label>
+      <button type="submit">Build prompt for ChatGPT</button>
+    </form>
+    <form method="post" class="inline-form">
+      <input type="hidden" name="action" value="run-poller">
+      <input type="hidden" name="subject" value="{{ selected_subject }}">
+      <input type="hidden" name="academic_year" value="{{ academic_year }}">
+      <input type="hidden" name="question_target" value="{{ question_target }}">
+      <button type="submit" class="secondary-button">Run daily poller now</button>
+    </form>
+    <form method="post" class="inline-form">
+      <input type="hidden" name="action" value="sync-generated">
+      <button type="submit" class="secondary-button">Generate and import queued jobs</button>
+    </form>
+    <p class="small">The daily poller creates prompt jobs from the latest mastery data, and the generator now targets an elite UK top-1% Year {{ academic_year }} standard with stronger topic-wise challenge.</p>
+    <p class="small">Automatic generation status: {% if openai_available %}OpenAI API configured{% else %}OPENAI_API_KEY missing{% endif %}</p>
+  </section>
+
+  <section class="card wide">
+    <div class="card-header">
+      <div>
+        <h2>{{ selected_subject }} adaptive state</h2>
+        <p class="small">Current quality and depth of stored material</p>
+      </div>
+    </div>
+    <div class="score">{{ progress.subject_score }}/100</div>
+    {% if progress.next_focus %}
+    <p><span class="badge">Current focus: {{ progress.next_focus.topic }}</span></p>
+    <p>Next target difficulty: {{ progress.next_focus.target_difficulty }}</p>
+    {% endif %}
+    <p>Total stored questions: {{ progress.question_total }}</p>
+  </section>
+
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Latest prompt</h2>
+        <p class="small">The exact instruction sent to your generation workflow</p>
+      </div>
+    </div>
+    {% if latest_prompt %}
+    <p><strong>Subject:</strong> {{ latest_prompt.subject }} | <strong>Year:</strong> {{ latest_prompt.academic_year }} | <strong>Questions:</strong> {{ latest_prompt.question_target }} | <strong>Status:</strong> {{ latest_prompt.status }}</p>
+    <p><strong>Performance basis:</strong> {{ latest_prompt.based_on_score }}/100{% if latest_prompt.focus_topic %} | <strong>Focus topic:</strong> {{ latest_prompt.focus_topic }}{% endif %}</p>
+    <pre>{{ latest_prompt.prompt_text }}</pre>
+    {% else %}
+    <p>No prompt generated yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card narrow">
+    <div class="card-header">
+      <div>
+        <h2>Import content</h2>
+        <p class="small">Paste JSON or semi-structured blocks for normalization</p>
+      </div>
+    </div>
+    <form method="post" class="form-stack">
+      <input type="hidden" name="action" value="import">
+      <input type="hidden" name="subject" value="{{ selected_subject }}">
+      <input type="hidden" name="academic_year" value="{{ academic_year }}">
+      <input type="hidden" name="question_target" value="{{ question_target }}">
+      {% if latest_prompt %}
+      <input type="hidden" name="prompt_job_id" value="{{ latest_prompt.id }}">
+      {% endif %}
+      <label>Import mode
+        <select name="import_mode">
+          <option value="auto" {% if import_mode == 'auto' %}selected{% endif %}>Auto</option>
+          <option value="manual" {% if import_mode == 'manual' %}selected{% endif %}>Manual format only</option>
+          <option value="ai" {% if import_mode == 'ai' %}selected{% endif %}>Use OpenAI to structure</option>
+        </select>
+      </label><br><br>
+      <label>Paste ChatGPT output or question blocks
+        <textarea name="raw_text" rows="18" placeholder='JSON example: [{"topic":"Algebra","difficulty_level":2,"question":"Solve 2x+5=17","answer":"x=6","marks":2}]
+
+Manual block example:
+Topic: Algebra
+Difficulty: 2
+Question: Solve 2x + 5 = 17.
+Answer: x = 6
+Marks: 2'></textarea>
+      </label>
+      <button type="submit">Import into database</button>
+    </form>
+    <p class="small">Imported questions are stored in SQLite and used by the adaptive test generator for this subject. For best results, paste topic-wise banks with mostly difficulty 4-5 material.</p>
+  </section>
+
+  <section class="card wide">
+    <div class="card-header">
+      <div>
+        <h2>Topic overview</h2>
+        <p class="small">Coverage and next difficulty by topic</p>
+      </div>
+    </div>
+    {% if progress.topics %}
+    <table>
+      <tr>
+        <th>Topic</th>
+        <th>Mastery</th>
+        <th>Attempts</th>
+        <th>Next difficulty</th>
+      </tr>
+      {% for item in progress.topics %}
+      <tr>
+        <td>{{ item.topic }}</td>
+        <td>{{ item.mastery }}%</td>
+        <td>{{ item.attempts }}</td>
+        <td>{{ item.target_difficulty }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p>No questions or attempt history yet for this subject.</p>
+    {% endif %}
+  </section>
+
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Recent prompt jobs</h2>
+        <p class="small">Audit trail for automated and manual generation</p>
+      </div>
+    </div>
+    {% if recent_prompt_jobs %}
+    <table>
+      <tr>
+        <th>Date</th>
+        <th>Trigger</th>
+        <th>Subject</th>
+        <th>Year</th>
+        <th>Questions</th>
+        <th>Score basis</th>
+        <th>Focus topic</th>
+        <th>Status</th>
+        <th>Imported</th>
+      </tr>
+      {% for job in recent_prompt_jobs %}
+      <tr>
+        <td>{{ job.created_on }}</td>
+        <td>{{ job.trigger_reason }}</td>
+        <td>{{ job.subject }}</td>
+        <td>{{ job.academic_year }}</td>
+        <td>{{ job.question_target }}</td>
+        <td>{{ job.based_on_score }}/100</td>
+        <td>{{ job.focus_topic or 'General' }}</td>
+        <td>{{ job.status }}</td>
+        <td>{{ job.imported_count }}</td>
+      </tr>
+      {% if job.last_error %}
+      <tr>
+        <td colspan="9" class="small">Last error: {{ job.last_error }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </table>
+    {% else %}
+    <p>No prompt jobs yet.</p>
+    {% endif %}
+  </section>
+
+  {% if imported_preview %}
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Imported preview</h2>
+        <p class="small">A sample of what just entered the bank</p>
+      </div>
+    </div>
+    <table>
+      <tr>
+        <th>Topic</th>
+        <th>Difficulty</th>
+        <th>Question</th>
+        <th>Marks</th>
+      </tr>
+      {% for row in imported_preview %}
+      <tr>
+        <td>{{ row.topic }}</td>
+        <td>{{ row.difficulty_level }}</td>
+        <td>{{ row.question }}</td>
+        <td>{{ row.marks }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

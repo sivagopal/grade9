@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Report | GCSE Grade 9 Planner{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div class="eyebrow">Narrative Summary</div>
+  <h1>Turn the raw data into a readable coaching report.</h1>
+  <p>Export or email the latest progress narrative so the planner can be reviewed like a serious academic dashboard rather than a loose collection of notes.</p>
+</section>
+
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>Actions</h2>
+      <p class="small">Share or archive the latest report</p>
+    </div>
+  </div>
+  <div class="button-row">
+    <a class="button" href="{{ url_for('main.download_report') }}">Download report</a>
+    <form method="post" action="{{ url_for('main.email_report') }}" class="inline-form">
+      <button type="submit">Email report to kranthiksg@gmail.com</button>
+    </form>
+  </div>
+</section>
+
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>Report output</h2>
+      <p class="small">Generated plain-text summary</p>
+    </div>
+  </div>
+  <pre>{{ report }}</pre>
+</section>
+{% endblock %}

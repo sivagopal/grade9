@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | GCSE Grade 9 Planner{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div class="eyebrow">Daily Learning Control Room</div>
+  <h1>Build a sharper, deeper, more adaptive study week.</h1>
+  <p>The dashboard turns revision, weak-topic recovery, and challenge pacing into one live system so each session feels more like a guided learning product than a plain tracker.</p>
+  <div class="hero-metrics">
+    <div class="hero-metric">
+      <span class="hero-metric-label">Trajectory</span>
+      <span class="hero-metric-value">{{ analysis.trajectory.score }}/100</span>
+    </div>
+    <div class="hero-metric">
+      <span class="hero-metric-label">Priority Subjects</span>
+      <span class="hero-metric-value">{{ analysis.priority_subjects | length }}</span>
+    </div>
+    <div class="hero-metric">
+      <span class="hero-metric-label">Status</span>
+      <span class="hero-metric-value">{{ analysis.trajectory.status }}</span>
+    </div>
+  </div>
+</section>
+
+<div class="grid">
+  <section class="card narrow">
+    <div class="card-header">
+      <div>
+        <h2>Grade 9 trajectory</h2>
+        <p class="small">Current academic momentum</p>
+      </div>
+    </div>
+    <div class="score">{{ analysis.trajectory.score }}/100</div>
+    <p><span class="badge">{{ analysis.trajectory.status }}</span></p>
+    <p class="muted-block">{{ analysis.trajectory.forecast }}</p>
+  </section>
+
+  <section class="card wide">
+    <div class="card-header">
+      <div>
+        <h2>Weekly summary</h2>
+        <p class="small">What the system is seeing right now</p>
+      </div>
+    </div>
+    <p class="muted-block">{{ analysis.summary }}</p>
+    <div class="pill-list">
+      {% for subject in analysis.priority_subjects %}
+      <span>{{ subject }}</span>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2>Daily targets</h2>
+        <p class="small">High-value actions for the next session</p>
+      </div>
+    </div>
+    <ul>
+      {% for target in analysis.trajectory.daily_targets %}
+      <li>{{ target }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2>Warnings</h2>
+        <p class="small">Signals that need intervention</p>
+      </div>
+    </div>
+    {% if analysis.warnings %}
+      <ul>
+        {% for warning in analysis.warnings %}
+        <li>{{ warning }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No major warnings today.</p>
+    {% endif %}
+  </section>
+
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Next-day timetable</h2>
+        <p class="small">{{ day_name }} {{ next_iso }}</p>
+      </div>
+    </div>
+    <table>
+      {% for time, task in timetable %}
+      <tr><td><strong>{{ time }}</strong></td><td>{{ task }}</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2>Weekend plan</h2>
+        <p class="small">Longer-session structure</p>
+      </div>
+    </div>
+    <table>
+      {% for time, task in weekend %}
+      <tr><td><strong>{{ time }}</strong></td><td>{{ task }}</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2>Free weak-area resources</h2>
+        <p class="small">Fast routes into recovery and stretch</p>
+      </div>
+    </div>
+    <ul>
+      {% for subject, name, url in resources %}
+      <li><strong>{{ subject }}</strong>: <a href="{{ url }}" target="_blank">{{ name }}</a></li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Question delivery</h2>
+        <p class="small">Control repetition and live refresh behaviour</p>
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('main.update_question_delivery_settings') }}" class="form-stack">
+      <label><input type="checkbox" name="allow_random_repeat" {% if settings.allow_random_repeat %}checked{% endif %}> Allow random repeats of already answered questions</label>
+      <label><input type="checkbox" name="startup_refresh_enabled" {% if settings.startup_refresh_enabled %}checked{% endif %}> Generate similar fresh questions whenever the app starts</label>
+      <label>Fresh similar questions per subject on startup
+        <input type="number" name="startup_refresh_target" min="1" max="30" value="{{ settings.startup_refresh_target }}">
+      </label>
+      <button type="submit">Save question settings</button>
+    </form>
+    {% if startup_refresh %}
+    <p class="small">
+      Last startup refresh:
+      {% if startup_refresh.error %}
+      failed - {{ startup_refresh.error }}
+      {% elif startup_refresh.skipped %}
+      skipped because live generation is unavailable
+      {% else %}
+      generated {{ startup_refresh.generated }} questions across {{ startup_refresh.subjects }} subjects
+      {% endif %}
+    </p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
