@@ -1,3 +1,5 @@
+import re
+
 RESOURCE_MAP = {
     "Biology": [
         ("BBC Bitesize GCSE Biology", "https://www.bbc.co.uk/bitesize/subjects/z9ddmp3"),
@@ -65,6 +67,16 @@ RESOURCE_MAP = {
 }
 
 TOPIC_VIDEO_MAP = {
+    ("Maths", "Probability"): [
+        ("The GCSE Maths Tutor: Probability", "https://www.youtube.com/results?search_query=gcse+maths+probability+the+gcse+maths+tutor"),
+        ("Corbettmaths: Probability", "https://www.youtube.com/results?search_query=corbettmaths+probability"),
+        ("GCSE Maths Probability Practice", "https://www.youtube.com/results?search_query=gcse+maths+probability+tree+diagrams"),
+    ],
+    ("Maths", "Statistics"): [
+        ("The GCSE Maths Tutor: Statistics", "https://www.youtube.com/results?search_query=gcse+maths+statistics+the+gcse+maths+tutor"),
+        ("Corbettmaths: Statistics", "https://www.youtube.com/results?search_query=corbettmaths+statistics"),
+        ("GCSE Maths Averages and Range", "https://www.youtube.com/results?search_query=gcse+maths+mean+median+mode+range"),
+    ],
     ("Maths", "Coordinate Geometry"): [
         ("Corbettmaths: Equation of a Line", "https://corbettmaths.com/2019/09/02/equation-of-a-line-videos/"),
         ("Corbettmaths: Area in Coordinates", "https://corbettmaths.com/2019/09/26/area-in-coordinates-videos/"),
@@ -83,6 +95,16 @@ TOPIC_VIDEO_MAP = {
 }
 
 RELATED_AREAS_MAP = {
+    "Probability": [
+        "Single-event probability",
+        "Two-step events and tree diagrams",
+        "Complements and checking total probability",
+    ],
+    "Statistics": [
+        "Mean, median, mode, and range",
+        "Reading tables and charts",
+        "Choosing the right average for a data set",
+    ],
     "Coordinate Geometry": [
         "Gradient and intercept form",
         "Simultaneous equations from graphs",
@@ -100,6 +122,77 @@ RELATED_AREAS_MAP = {
     ],
 }
 
+
+def _normalize_topic_label(value):
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _matches_any_pattern(text, patterns):
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _probability_signal(text):
+    return _matches_any_pattern(
+        text,
+        [
+            r"\bprobability\b",
+            r"\bchance\b",
+            r"\blikely\b",
+            r"\bunlikely\b",
+            r"\brandom\b",
+            r"\bspinner\b",
+            r"\bdice\b",
+            r"\bdie\b",
+            r"\bcoin\b",
+            r"\bbag contains\b",
+            r"\bwithout replacement\b",
+            r"\breplacement\b",
+            r"\bevent\b",
+            r"\boutcome\b",
+        ],
+    )
+
+
+def _statistics_signal(text):
+    return _matches_any_pattern(
+        text,
+        [
+            r"\bmean\b",
+            r"\bmedian\b",
+            r"\bmode\b",
+            r"\brange\b",
+            r"\baverage\b",
+            r"\bfrequency\b",
+            r"\bdata\b",
+            r"\bsurvey\b",
+            r"\bchart\b",
+            r"\bbar chart\b",
+            r"\bpie chart\b",
+            r"\bhistogram\b",
+            r"\bfrequency table\b",
+        ],
+    )
+
+
+def infer_focus_area(subject, topic, subtopic="", question_text=""):
+    topic_text = str(topic or "").strip() or "General"
+    subtopic_text = str(subtopic or "").strip()
+    if subtopic_text:
+        return subtopic_text
+
+    normalized_subject = str(subject or "").strip()
+    normalized_topic = _normalize_topic_label(topic_text)
+    combined_text = " ".join([topic_text, subtopic_text, str(question_text or "")]).lower()
+
+    if normalized_subject == "Maths" and normalized_topic == "statistics and probability":
+        if _probability_signal(combined_text) and not _statistics_signal(combined_text):
+            return "Probability"
+        if _statistics_signal(combined_text) and not _probability_signal(combined_text):
+            return "Statistics"
+
+    return topic_text
+
+
 def recommend_resources(priority_subjects, max_per_subject=3):
     result = []
     for subject in priority_subjects:
@@ -109,11 +202,12 @@ def recommend_resources(priority_subjects, max_per_subject=3):
 
 
 def recommend_topic_videos(subject, topic, max_items=3):
-    direct = TOPIC_VIDEO_MAP.get((subject, topic), [])
+    focus_topic = infer_focus_area(subject, topic)
+    direct = TOPIC_VIDEO_MAP.get((subject, focus_topic), [])
     if direct:
         return direct[:max_items]
 
-    normalized = topic.lower()
+    normalized = focus_topic.lower()
     for (mapped_subject, mapped_topic), resources in TOPIC_VIDEO_MAP.items():
         if mapped_subject == subject and mapped_topic.lower() in normalized:
             return resources[:max_items]

@@ -1,7 +1,9 @@
 from io import BytesIO
-from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
+
+from app.math_format import render_math_plain
+from app.matplotlib_service import load_question_asset_image
 
 
 PAGE_SIZE = (1240, 1754)
@@ -22,20 +24,48 @@ def build_test_pdf(questions, title):
             page, draw, cursor_y = _new_page()
             cursor_y = _draw_title(draw, title, cursor_y)
         cursor_y = _draw_question_block(page, draw, question, index, cursor_y)
+    pages.append(page)
 
+    output = BytesIO()
+    rgb_pages = [page.convert("RGB") for page in pages]
+    rgb_pages[0].save(output, format="PDF", save_all=True, append_images=rgb_pages[1:])
+    output.seek(0)
+    return output.getvalue()
+
+
+def build_mark_scheme_pdf(questions, title):
+    pages = []
     mark_page, mark_draw, mark_y = _new_page()
     mark_y = _draw_title(mark_draw, f"{title} - Mark Scheme", mark_y)
+
     for index, question in enumerate(questions, 1):
-        lines = _wrap_text(mark_draw, f"{index}. {question['answer']} ({question['marks']} marks)", PAGE_SIZE[0] - MARGIN * 2, _body_font())
-        block_height = _text_height(lines, _body_font()) + 18
+        question_context = str(question.get("question", "")).strip()
+        if len(question_context) > 90:
+            question_context = question_context[:87].rstrip() + "..."
+        heading_lines = _wrap_text(
+            mark_draw,
+            f"{index}. {question.get('topic', 'General')}: {render_math_plain(question_context)}",
+            PAGE_SIZE[0] - MARGIN * 2,
+            _small_font(),
+        )
+        answer_lines = _wrap_text(
+            mark_draw,
+            f"Answer: {render_math_plain(question['answer'])} ({question['marks']} marks)",
+            PAGE_SIZE[0] - MARGIN * 2,
+            _body_font(),
+        )
+        block_height = _text_height(heading_lines, _small_font()) + _text_height(answer_lines, _body_font()) + 22
         if mark_y + block_height > PAGE_SIZE[1] - MARGIN:
             pages.append(mark_page)
             mark_page, mark_draw, mark_y = _new_page()
             mark_y = _draw_title(mark_draw, f"{title} - Mark Scheme", mark_y)
-        for line in lines:
+        for line in heading_lines:
+            mark_draw.text((MARGIN, mark_y), line, fill="#2f6b49", font=_small_font())
+            mark_y += _line_height(_small_font())
+        for line in answer_lines:
             mark_draw.text((MARGIN, mark_y), line, fill="#183022", font=_body_font())
             mark_y += _line_height(_body_font())
-        mark_y += 18
+        mark_y += 22
     pages.append(mark_page)
 
     output = BytesIO()
@@ -60,8 +90,8 @@ def _draw_title(draw, title, cursor_y):
 def _draw_question_block(page, draw, question, index, cursor_y):
     heading = f"{index}. {question['subject']} | {question.get('topic', 'General')} | Difficulty {question.get('difficulty_level', 1)} | {question['marks']} marks"
     heading_lines = _wrap_text(draw, heading, PAGE_SIZE[0] - MARGIN * 2 - 32, _small_font())
-    question_lines = _wrap_text(draw, question["question"], PAGE_SIZE[0] - MARGIN * 2 - 32, _body_font())
-    asset = _load_asset(question.get("asset_path"))
+    question_lines = _wrap_text(draw, render_math_plain(question["question"]), PAGE_SIZE[0] - MARGIN * 2 - 32, _body_font())
+    asset = load_question_asset_image(question)
     block_height = _estimate_question_block_height(question, draw)
     draw.rounded_rectangle(
         (MARGIN, cursor_y, PAGE_SIZE[0] - MARGIN, cursor_y + block_height - 10),
@@ -94,9 +124,9 @@ def _draw_question_block(page, draw, question, index, cursor_y):
 def _estimate_question_block_height(question, draw):
     heading = f"1. {question['subject']} | {question.get('topic', 'General')} | Difficulty {question.get('difficulty_level', 1)} | {question['marks']} marks"
     heading_lines = _wrap_text(draw, heading, PAGE_SIZE[0] - MARGIN * 2 - 32, _small_font())
-    question_lines = _wrap_text(draw, question["question"], PAGE_SIZE[0] - MARGIN * 2 - 32, _body_font())
+    question_lines = _wrap_text(draw, render_math_plain(question["question"]), PAGE_SIZE[0] - MARGIN * 2 - 32, _body_font())
     height = 22 + _text_height(heading_lines, _small_font()) + 8 + _text_height(question_lines, _body_font()) + 18 + 126
-    asset = _load_asset(question.get("asset_path"))
+    asset = load_question_asset_image(question)
     if asset:
         image_max_width = PAGE_SIZE[0] - MARGIN * 2 - 36
         image_max_height = 420
@@ -129,19 +159,6 @@ def _text_height(lines, font):
 def _line_height(font):
     bbox = font.getbbox("Ag")
     return (bbox[3] - bbox[1]) + LINE_SPACING
-
-
-def _load_asset(asset_path):
-    if not asset_path:
-        return None
-    absolute = Path(__file__).resolve().parent / "static" / asset_path
-    if not absolute.exists():
-        return None
-    image = Image.open(absolute)
-    if image.mode not in {"RGB", "L"}:
-        image = image.convert("RGB")
-    return image
-
 
 def _title_font():
     return _font(30)

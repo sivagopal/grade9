@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'register' %}Admin Register{% else %}Admin Login{% endif %} | GCSE Grade 9 Planner{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div class="eyebrow">Admin Access</div>
+  {% if mode == 'register' %}
+  <h1>Create the one-off admin account for question-bank control.</h1>
+  <p>This registration is available only until the first admin user is created. After that, question submission tools stay behind the login page.</p>
+  {% else %}
+  <h1>Sign in to open the protected question-bank tools.</h1>
+  <p>The question submission UI and question insert API stay locked until the saved admin username and password match.</p>
+  {% endif %}
+</section>
+
+<section class="card auth-card">
+  <div class="card-header">
+    <div>
+      <h2>{% if mode == 'register' %}Admin registration{% else %}Admin login{% endif %}</h2>
+      <p class="small">{% if mode == 'register' %}Stored locally in SQLite as a single admin user.{% else %}Only the stored admin account can unlock the admin tools.{% endif %}</p>
+    </div>
+  </div>
+  <form method="post" class="form-stack auth-form">
+    {% if next_url %}
+    <input type="hidden" name="next" value="{{ next_url }}">
+    {% endif %}
+    <label>Username
+      <input type="text" name="username" autocomplete="username" required>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="{% if mode == 'register' %}new-password{% else %}current-password{% endif %}" required>
+    </label>
+    {% if mode == 'register' %}
+    <label>Confirm password
+      <input type="password" name="password_confirm" autocomplete="new-password" required>
+    </label>
+    {% endif %}
+    <div class="button-row">
+      <button type="submit">{% if mode == 'register' %}Create admin account{% else %}Log in{% endif %}</button>
+      {% if mode == 'login' and not admin_registered %}
+      <a class="button secondary" href="{{ url_for('main.admin_register') }}">Register</a>
+      {% elif mode == 'register' and admin_registered %}
+      <a class="button secondary" href="{{ url_for('main.admin_login') }}">Back to login</a>
+      {% endif %}
+    </div>
+  </form>
+</section>
+{% endblock %}

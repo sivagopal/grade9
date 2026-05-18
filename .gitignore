@@ -15,5 +15,6 @@ uploads/*
 app/.env
 *.env
 app/static/generated/
+app/static/uploads/
 
 .idea/

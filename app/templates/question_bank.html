@@ -101,18 +101,165 @@
         </select>
       </label><br><br>
       <label>Paste ChatGPT output or question blocks
-        <textarea name="raw_text" rows="18" placeholder='JSON example: [{"topic":"Algebra","difficulty_level":2,"question":"Solve 2x+5=17","answer":"x=6","marks":2}]
+        <textarea name="raw_text" rows="18" placeholder='JSON array example for website import:
+[
+  {
+    "topic": "Bioenergetics",
+    "difficulty_level": 1,
+    "question": "State the word equation for photosynthesis and name the organelle where it happens in plant cells.",
+    "answer": "Carbon dioxide + water -> glucose + oxygen. Photosynthesis happens in chloroplasts.",
+    "marks": 2
+  }
+]
 
 Manual block example:
+Subject: Maths
 Topic: Algebra
+Subtopic: Linear equations
 Difficulty: 2
 Question: Solve 2x + 5 = 17.
 Answer: x = 6
+Explanation: Subtract 5, then divide by 2.
+Video URL: https://www.youtube.com/watch?v=example
 Marks: 2'></textarea>
       </label>
-      <button type="submit">Import into database</button>
+      <button type="submit">Import question set</button>
     </form>
-    <p class="small">Imported questions are stored in SQLite and used by the adaptive test generator for this subject. For best results, paste topic-wise banks with mostly difficulty 4-5 material.</p>
+    <p class="small">Imported questions are stored in SQLite and used by the adaptive test generator for this subject. For website import, you can paste a plain JSON array like your Biology example. Subject, subtopic, explanation, video link, and image paths are also supported.</p>
+    <pre>Website import box example
+[
+  {
+    "topic": "Bioenergetics",
+    "difficulty_level": 1,
+    "question": "State the word equation for photosynthesis and name the organelle where it happens in plant cells.",
+    "answer": "Carbon dioxide + water -> glucose + oxygen. Photosynthesis happens in chloroplasts. Mark scheme: 1 mark for correct word equation; 1 mark for chloroplasts.",
+    "marks": 2
+  },
+  {
+    "topic": "Bioenergetics",
+    "difficulty_level": 1,
+    "question": "Explain why plants need light for photosynthesis.",
+    "answer": "Light provides the energy needed to convert carbon dioxide and water into glucose. Mark scheme: 1 mark for stating light provides energy; 1 mark for linking this energy to making glucose/photosynthesis.",
+    "marks": 2
+  }
+]</pre>
+  </section>
+
+  <section class="card wide">
+    <div class="card-header">
+      <div>
+        <h2>Admin add question</h2>
+        <p class="small">Save one question manually. For JSON arrays, use Import content.</p>
+      </div>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="form-stack" id="manual-question-form">
+      <input type="hidden" name="action" value="add-single-question">
+      <div class="button-row">
+        <label style="flex: 1;">Subject
+          <select name="subject" id="manual-subject-select">
+            {% for subject in subjects %}
+            <option value="{{ subject }}" {% if subject == request.form.get('subject', selected_subject) %}selected{% endif %}>{{ subject }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label style="flex: 1;">Topic
+          <input type="text" name="topic" id="manual-topic-input" list="manual-topic-options" value="{{ request.form.get('topic', '') }}" placeholder="e.g. Algebra">
+          <datalist id="manual-topic-options"></datalist>
+        </label>
+      </div>
+      <div class="button-row">
+        <label style="flex: 1;">Subtopic
+          <input type="text" name="subtopic" value="{{ request.form.get('subtopic', '') }}" placeholder="e.g. Quadratic equations">
+        </label>
+        <label style="flex: 1;">Difficulty
+          <select name="difficulty_level">
+            {% for level in range(1, 6) %}
+            <option value="{{ level }}" {% if request.form.get('difficulty_level', '3')|int == level %}selected{% endif %}>{{ level }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label style="width: 140px;">Marks
+          <input type="number" name="marks" min="1" max="20" value="{{ request.form.get('marks', 2) }}">
+        </label>
+      </div>
+      <label>Question
+        <textarea name="question_text" rows="5" placeholder="Paste the question exactly as you want it stored.">{{ request.form.get('question_text', '') }}</textarea>
+      </label>
+      <p class="small">Question text can be left blank if the full question is uploaded as an image.</p>
+      <div class="inline-panel">
+        <h3>Question image</h3>
+        <div class="button-row">
+          <label class="radio-row">
+            <input type="radio" name="question_image_mode" value="no" {% if request.form.get('question_image_mode', 'no') != 'yes' %}checked{% endif %}>
+            <span>No</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="question_image_mode" value="yes" {% if request.form.get('question_image_mode') == 'yes' %}checked{% endif %}>
+            <span>Yes</span>
+          </label>
+        </div>
+        <div class="conditional-upload" data-upload-target="question" {% if request.form.get('question_image_mode') != 'yes' %}hidden{% endif %}>
+          <label>Upload question image
+            <input type="file" name="question_image" accept=".png,.jpg,.jpeg,.webp,.gif">
+          </label>
+          <p class="small">Use this when the question itself is a screenshot, worksheet crop, graph, or diagram.</p>
+        </div>
+      </div>
+      <label>Answer
+        <textarea name="answer_text" rows="4" placeholder="Paste the mark scheme or expected answer.">{{ request.form.get('answer_text', '') }}</textarea>
+      </label>
+      <p class="small">Answer text can be left blank if the full solution is uploaded as an image.</p>
+      <div class="inline-panel">
+        <h3>Answer image</h3>
+        <div class="button-row">
+          <label class="radio-row">
+            <input type="radio" name="answer_image_mode" value="no" {% if request.form.get('answer_image_mode', 'no') != 'yes' %}checked{% endif %}>
+            <span>No</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="answer_image_mode" value="yes" {% if request.form.get('answer_image_mode') == 'yes' %}checked{% endif %}>
+            <span>Yes</span>
+          </label>
+        </div>
+        <div class="conditional-upload" data-upload-target="answer" {% if request.form.get('answer_image_mode') != 'yes' %}hidden{% endif %}>
+          <label>Upload answer image
+            <input type="file" name="answer_image" accept=".png,.jpg,.jpeg,.webp,.gif">
+          </label>
+          <p class="small">Use this when the worked solution or mark scheme is an image.</p>
+        </div>
+      </div>
+      <label>Explanation
+        <textarea name="explanation_text" rows="3" placeholder="Optional worked explanation.">{{ request.form.get('explanation_text', '') }}</textarea>
+      </label>
+      <label>Video URL
+        <input type="url" name="video_url" value="{{ request.form.get('video_url', '') }}" placeholder="https://...">
+      </label>
+      <div class="button-row">
+        <button type="submit">Save single question</button>
+      </div>
+    </form>
+    <pre>POST /api/questions
+Content-Type: application/json
+
+{
+  "subject": "Biology",
+  "questions": [
+    {
+      "topic": "Bioenergetics",
+      "difficulty_level": 1,
+      "question": "State the word equation for photosynthesis and name the organelle where it happens in plant cells.",
+      "answer": "Carbon dioxide + water -> glucose + oxygen. Photosynthesis happens in chloroplasts. Mark scheme: 1 mark for correct word equation; 1 mark for chloroplasts.",
+      "marks": 2
+    },
+    {
+      "topic": "Bioenergetics",
+      "difficulty_level": 2,
+      "question": "A plant is left in the dark for 48 hours before testing a leaf for starch. Explain why this step is done.",
+      "answer": "The plant is destarched so any starch already present is used up by respiration. This means starch found later must have been made during the experiment. Mark scheme: 1 mark for using up stored starch; 1 mark for linking this to making the test fair/valid.",
+      "marks": 2
+    }
+  ]
+}</pre>
   </section>
 
   <section class="card wide">
@@ -199,20 +346,70 @@ Marks: 2'></textarea>
     <table>
       <tr>
         <th>Topic</th>
+        <th>Subtopic</th>
         <th>Difficulty</th>
         <th>Question</th>
         <th>Marks</th>
+        <th>Video</th>
       </tr>
       {% for row in imported_preview %}
       <tr>
         <td>{{ row.topic }}</td>
+        <td>{{ row.subtopic or '-' }}</td>
         <td>{{ row.difficulty_level }}</td>
-        <td>{{ row.question }}</td>
+        <td>{{ (row.question or '[image-based question]') | math_html }}</td>
         <td>{{ row.marks }}</td>
+        <td>{% if row.video_url %}<a href="{{ row.video_url }}" target="_blank" rel="noopener noreferrer">Link</a>{% else %}-{% endif %}</td>
       </tr>
       {% endfor %}
     </table>
   </section>
   {% endif %}
 </div>
+<script>
+  (() => {
+    const subjectTopicsMap = {{ subject_topics_map | tojson }};
+    const subjectSelect = document.getElementById("manual-subject-select");
+    const topicInput = document.getElementById("manual-topic-input");
+    const topicOptions = document.getElementById("manual-topic-options");
+
+    if (!subjectSelect || !topicInput || !topicOptions) {
+      return;
+    }
+
+    const renderTopics = () => {
+      const currentValue = topicInput.value;
+      const topics = subjectTopicsMap[subjectSelect.value] || [];
+      topicOptions.innerHTML = "";
+      for (const topic of topics) {
+        const option = document.createElement("option");
+        option.value = topic;
+        topicOptions.appendChild(option);
+      }
+      topicInput.value = currentValue;
+    };
+
+    subjectSelect.addEventListener("change", renderTopics);
+    renderTopics();
+
+    const bindUploadToggle = (groupName, targetName) => {
+      const radios = document.querySelectorAll(`input[name="${groupName}"]`);
+      const target = document.querySelector(`[data-upload-target="${targetName}"]`);
+      if (!radios.length || !target) {
+        return;
+      }
+      const sync = () => {
+        const selected = [...radios].find((radio) => radio.checked);
+        target.hidden = !selected || selected.value !== "yes";
+      };
+      for (const radio of radios) {
+        radio.addEventListener("change", sync);
+      }
+      sync();
+    };
+
+    bindUploadToggle("question_image_mode", "question");
+    bindUploadToggle("answer_image_mode", "answer");
+  })();
+</script>
 {% endblock %}

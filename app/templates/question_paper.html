@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Question Paper | GCSE Grade 9 Planner{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div class="eyebrow">Question Paper</div>
+  <h1>{{ paper.title }}</h1>
+  <p>Answer directly in the browser, attach diagram responses where needed, or upload one full worked scan.</p>
+</section>
+
+<section class="card full">
+  <div class="card-header">
+    <div>
+      <h2>Paper details</h2>
+      <p class="small">{{ paper.subject }}{% if paper.subtopic %} | {{ paper.subtopic }}{% endif %} | {{ paper.duration }} minutes | {{ paper.source|upper }}</p>
+    </div>
+    <div class="button-row">
+      <a class="button secondary" href="{{ paper.download_urls.download_pdf_url }}">Download paper PDF</a>
+    </div>
+  </div>
+
+  {% if submission %}
+  <div class="inline-panel">
+    <h3>Responses saved for this browser session</h3>
+    <p class="small">Submitted {{ submission.submitted_at }}. Typed answers: {{ submission.answered_count }}. Uploaded files: {{ submission.uploaded_file_count }}.</p>
+    {% if submission.full_scan %}
+    <p class="small">Full paper upload: <a href="{{ submission.full_scan.url }}" target="_blank" rel="noopener noreferrer">{{ submission.full_scan.original_name }}</a></p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="inline-panel">
+    <h3>Show answers</h3>
+    <p class="small">Answers stay hidden until a password is generated here and then entered correctly.</p>
+    <div class="button-row">
+      <form method="post" class="inline-form">
+        <input type="hidden" name="paper_token" value="{{ request.form.get('paper_token', '') }}">
+        <input type="hidden" name="action" value="generate-answer-password">
+        <button type="submit" class="secondary-button">Generate password</button>
+      </form>
+    </div>
+    {% if answer_password %}
+    <p class="small">Generated password: <strong>{{ answer_password }}</strong></p>
+    <p class="small">Send this password to the student before they unlock the answers.</p>
+    <form method="post" class="form-stack">
+      <input type="hidden" name="paper_token" value="{{ request.form.get('paper_token', '') }}">
+      <input type="hidden" name="action" value="unlock-answers">
+      <label>Enter password to show answers
+        <input type="text" name="answer_password" autocomplete="off" placeholder="Enter answer password">
+      </label>
+      <div class="button-row">
+        <button type="submit" class="secondary-button">Show answers</button>
+      </div>
+    </form>
+    {% endif %}
+    {% if answers_unlocked %}
+    <p class="small">Answers are visible below each question on this page.</p>
+    {% endif %}
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="form-stack">
+    <input type="hidden" name="paper_token" value="{{ request.form.get('paper_token', '') }}">
+    <input type="hidden" name="action" value="submit-responses">
+
+    <div class="inline-panel">
+      <h3>Whole-paper upload</h3>
+      <label>Scan or photo of the full paper
+        <input type="file" name="full_scan" accept=".png,.jpg,.jpeg,.pdf">
+      </label>
+      <p class="small">Use this if the whole response is handwritten or if several answers depend on sketches.</p>
+    </div>
+
+    {% for q in questions %}
+    {% set saved_response = submission.responses.get(loop.index) if submission else None %}
+    <article class="question-paper-item">
+      <div class="question-paper-meta">
+        <p><strong>{{ loop.index }}.</strong> <span class="badge">{{ q.topic }}</span> Difficulty {{ q.difficulty_level }} | {{ q.marks }} marks{% if q.subject and q.subject != paper.subject %} | {{ q.subject }}{% endif %}</p>
+      </div>
+      {% if q.question %}
+      <p>{{ q.question | math_html }}</p>
+      {% endif %}
+      {% if q.asset_url %}
+      {% if q.asset_is_image %}
+      <img class="question-figure" src="{{ q.asset_url }}" alt="Diagram for question {{ loop.index }}">
+      {% else %}
+      <p><a href="{{ q.asset_url }}" target="_blank" rel="noopener noreferrer">Open question reference</a></p>
+      {% endif %}
+      {% endif %}
+      <label>Your typed answer
+        <textarea name="answer_text_{{ loop.index }}" rows="6" placeholder="Type your answer here...">{{ saved_response.answer_text if saved_response else '' }}</textarea>
+      </label>
+      <div class="question-response-row">
+        <label>{{ 'Upload diagram/photo/PDF' if q.diagram_answer_recommended else 'Optional upload' }}
+          <input type="file" name="answer_file_{{ loop.index }}" accept=".png,.jpg,.jpeg,.pdf">
+        </label>
+        <div class="small">
+          {% if q.diagram_answer_recommended %}
+          This question may need a drawn, graphed, or labelled response.
+          {% else %}
+          Attach supporting working if you answered on paper.
+          {% endif %}
+          {% if saved_response and saved_response.file %}
+          <br><a href="{{ saved_response.file.url }}" target="_blank" rel="noopener noreferrer">Open uploaded file: {{ saved_response.file.original_name }}</a>
+          {% endif %}
+        </div>
+      </div>
+      {% if answers_unlocked %}
+      <div class="inline-panel">
+        {% if q.answer_asset_url %}
+        {% if q.answer_asset_is_image %}
+        <p><strong>Worked solution:</strong></p>
+        <img class="question-figure" src="{{ q.answer_asset_url }}" alt="Worked answer for question {{ loop.index }}">
+        {% else %}
+        <p class="small"><strong>Worked mark scheme:</strong> <a href="{{ q.answer_asset_url }}" target="_blank" rel="noopener noreferrer">Open answer sheet</a></p>
+        {% endif %}
+        {% endif %}
+        {% if q.answer %}
+        <p><strong>Answer:</strong> {{ q.answer | math_html }}</p>
+        {% endif %}
+        {% if q.explanation %}
+        <p class="small"><strong>Explanation:</strong> {{ q.explanation | math_html }}</p>
+        {% endif %}
+        {% if q.video_url %}
+        <p class="small"><strong>Question video:</strong> <a href="{{ q.video_url }}" target="_blank" rel="noopener noreferrer">Watch solution video</a></p>
+        {% endif %}
+      </div>
+      {% endif %}
+    </article>
+    {% endfor %}
+
+    <div class="button-row">
+      <button type="submit">Save answers on this page</button>
+      <a class="button secondary" href="{{ paper.download_urls.download_pdf_url }}">Open printable PDF</a>
+      <a class="button secondary" href="{{ url_for('main.mark') }}">AI marking</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

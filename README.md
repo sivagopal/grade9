@@ -36,6 +36,8 @@ http://127.0.0.1:5001
 - Weak-area resource recommendations
 - Email daily report to `kranthiksg@gmail.com`
 - Optional ChatGPT/OpenAI test generation and scanned-answer marking
+- Matplotlib-backed on-the-fly diagram rendering from stored question data
+- Canonical Year 8 maths subtopic selector for targeted mini tests
 
 ## Email setup
 
@@ -79,5 +81,6 @@ You can keep secrets outside the project directory.
 
 ## Notes
 
-- Default URL: `http://127.0.0.1:5001`
-- To access from another device on the same Wi-Fi, run with host `0.0.0.0`, but only do this on a trusted home network.
+- Default bind host: `0.0.0.0`
+- Local browser URL on the Mac: `http://127.0.0.1:5001`
+- Same-Wi-Fi device URL: `http://<your-mac-lan-ip>:5001`

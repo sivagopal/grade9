@@ -20,9 +20,18 @@
         <a href="{{ url_for('main.index') }}">Dashboard</a>
         <a href="{{ url_for('main.log_day') }}">Daily Log</a>
         <a href="{{ url_for('main.test_page') }}">Tests</a>
-        <a href="{{ url_for('main.question_bank_page') }}">Question Bank</a>
         <a href="{{ url_for('main.report') }}">Report</a>
         <a href="{{ url_for('main.mark') }}">AI Marking</a>
+        {% if admin_authenticated %}
+        <a href="{{ url_for('main.question_bank_page') }}">Question Bank</a>
+        <form method="post" action="{{ url_for('main.admin_logout') }}" class="nav-inline-form">
+          <button type="submit" class="secondary-button nav-button">Admin Logout</button>
+        </form>
+        {% elif not admin_registered %}
+        <a href="{{ url_for('main.admin_register') }}">Admin Register</a>
+        {% else %}
+        <a href="{{ url_for('main.admin_login') }}">Admin Login</a>
+        {% endif %}
       </nav>
     </header>
 
@@ -32,6 +41,52 @@
           <div class="flash {{ category }}">{{ message }}</div>
         {% endfor %}
       {% endwith %}
+
+      {% if flagged_topic_alerts %}
+      <div class="startup-alert-overlay" id="startup-alert-overlay">
+        <section class="startup-alert-modal" role="dialog" aria-modal="true" aria-labelledby="startup-alert-title">
+          <div class="startup-alert-header">
+            <div>
+              <p class="eyebrow">Weak Topic Alert</p>
+              <h2 id="startup-alert-title">These topics have been answered wrongly at least 5 times</h2>
+            </div>
+            <button type="button" class="secondary-button" id="startup-alert-close">Close</button>
+          </div>
+          <div class="startup-alert-list">
+            {% for item in flagged_topic_alerts %}
+            <article class="startup-alert-item">
+              <div class="startup-alert-meta">
+                <span class="badge">{{ item.subject }}</span>
+                <strong>{{ item.focus_label }}</strong>
+                <span class="small">{{ item.wrong_count }} wrong answers</span>
+              </div>
+              <ul class="startup-alert-links">
+                {% for name, url in item.videos %}
+                <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ name }}</a></li>
+                {% endfor %}
+              </ul>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+      <script>
+        (function () {
+          const overlay = document.getElementById("startup-alert-overlay");
+          const closeButton = document.getElementById("startup-alert-close");
+          if (!overlay || !closeButton) return;
+          closeButton.addEventListener("click", function () {
+            overlay.style.display = "none";
+          });
+          overlay.addEventListener("click", function (event) {
+            if (event.target === overlay) {
+              overlay.style.display = "none";
+            }
+          });
+        }());
+      </script>
+      {% endif %}
+
       {% block content %}{% endblock %}
     </main>
   </div>

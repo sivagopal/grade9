@@ -3,8 +3,8 @@
 {% block content %}
 <section class="page-hero">
   <div class="eyebrow">Adaptive Assessment</div>
-  <h1>Run tests that feel curated, visual, and progressively more demanding.</h1>
-  <p>Generate local or live papers, surface topic mastery instantly, and feed the result back into the adaptive engine so the next session becomes more precise.</p>
+  <h1>Build, save, retake, and export subject tests with cleaner follow-through.</h1>
+  <p>Local papers adapt to your stored bank. AI papers are now saved locally, downloadable as PDF, and surfaced again when marks were low enough to need another pass.</p>
 </section>
 
 <div class="grid">
@@ -12,21 +12,35 @@
     <div class="card-header">
       <div>
         <h2>Generate test</h2>
-        <p class="small">Choose source, length, and subject focus</p>
+        <p class="small">Subject, source, timing, and topic strategy</p>
       </div>
     </div>
-    <form method="post" class="form-stack">
+    <form method="post" class="form-stack" id="test-generator-form">
       <label>Test type
         <select name="test_type">
-          <option value="daily_all" {% if test_type == 'daily_all' %}selected{% endif %}>Daily test for all subjects</option>
           <option value="subject_mini" {% if test_type == 'subject_mini' %}selected{% endif %}>Mini test for one subject</option>
+          <option value="daily_all" {% if test_type == 'daily_all' %}selected{% endif %}>Daily test for all subjects</option>
         </select>
       </label><br><br>
       <label>Subject
-        <select name="subject">
+        <select name="subject" id="subject-select">
           {% for subject in subjects %}
           <option value="{{ subject }}" {% if subject == selected_subject %}selected{% endif %}>{{ subject }}</option>
           {% endfor %}
+        </select>
+      </label><br><br>
+      <label>Subtopic
+        <select name="subtopic" id="subtopic-select">
+          <option value="" {% if not selected_subtopic %}selected{% endif %}>Any subtopic</option>
+          {% for subtopic in subtopics %}
+          <option value="{{ subtopic }}" {% if subtopic == selected_subtopic %}selected{% endif %}>{{ subtopic }}</option>
+          {% endfor %}
+        </select>
+      </label><br><br>
+      <label>Selection mode
+        <select name="selection_mode" id="selection-mode-select">
+          <option value="adaptive" {% if selection_mode == 'adaptive' %}selected{% endif %}>Adaptive focus</option>
+          <option value="randomize" {% if selection_mode == 'randomize' %}selected{% endif %}>Randomise across subject</option>
         </select>
       </label><br><br>
       <label>Source
@@ -39,24 +53,56 @@
         <input type="number" name="duration" min="5" max="120" value="{{ duration }}">
       </label><br><br>
       <label>Questions
-        <input type="number" name="count" min="1" max="30" value="{{ question_count }}">
+        <input type="number" name="count" min="10" max="30" value="{{ question_count }}">
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="diagram_only" {% if diagram_only %}checked{% endif %}>
+        <span>Generate diagram questions only</span>
+      </label>
+      <label>Output
+        <select name="delivery_action">
+          <option value="screen" {% if delivery_action == 'screen' %}selected{% endif %}>Show on screen</option>
+          <option value="paper_pdf" {% if delivery_action == 'paper_pdf' %}selected{% endif %}>Download paper PDF</option>
+          <option value="markdown" {% if delivery_action == 'markdown' %}selected{% endif %}>Download markdown</option>
+        </select>
       </label>
       <div class="button-row">
-        <button type="submit">Generate test</button>
-        <a class="button secondary" href="{{ url_for('main.download_test', test_type=test_type, subject=selected_subject, source=source, duration=duration, count=question_count, format='md') }}">Download .md</a>
-        <a class="button secondary" href="{{ url_for('main.download_test', test_type=test_type, subject=selected_subject, source=source, duration=duration, count=question_count, format='pdf') }}">Download PDF</a>
+        <button type="submit">Go</button>
       </div>
     </form>
-    <p class="small">Use `Daily test for all subjects` for the mixed daily paper. Use `Mini test for one subject` for a 30-minute subject paper. For local tests, the app uses the SQLite bank. For OpenAI tests, it generates the paper live.</p>
-    <p class="small">PDF export is designed for local tests so plotted diagrams and layout can be embedded directly.</p>
+    <p class="small">Subject papers now default to at least 10 questions. Local papers use a mixed difficulty pattern instead of grouping all the hardest questions together.</p>
+    <p class="small">`Generate diagram questions only` uses the local bank and picks only questions with a real image or a usable generated figure.</p>
+    <p class="small">`Randomise across subject` uses the duration as the main guide and spreads selection across topics when no subtopic is locked.</p>
+    <p class="small">Subjects marked as hobby only stay out of this regular testing dropdown.</p>
     <p class="small">OpenAI status: {% if openai_enabled %}configured{% else %}not configured{% endif %}</p>
+
+    <div class="inline-panel" style="margin-top: 18px;">
+      <h3>Add subject</h3>
+      <form method="post" action="{{ url_for('main.add_subject') }}" class="form-stack">
+        <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+        <label>Subject name
+          <input type="text" name="subject_name" placeholder="e.g. History">
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" name="is_stem">
+          <span>Treat as STEM</span>
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" name="is_hobby">
+          <span>Mark as hobby only</span>
+        </label>
+        <div class="button-row">
+          <button type="submit">Add subject</button>
+        </div>
+      </form>
+    </div>
   </section>
 
   <section class="card wide">
     <div class="card-header">
       <div>
         <h2>{{ selected_subject }} progress</h2>
-        <p class="small">Mastery snapshot for the active subject</p>
+        <p class="small">Current subject snapshot and saved-paper recovery queue</p>
       </div>
     </div>
     <div class="score">{{ progress.subject_score }}/100</div>
@@ -65,13 +111,34 @@
     <p>Recommended difficulty: {{ progress.next_focus.target_difficulty }}</p>
     {% endif %}
     <p>Stored questions: {{ progress.question_total }}</p>
+    {% if saved_generated_test %}
+    <div class="inline-panel">
+      <h3>Current saved AI paper</h3>
+      <p class="small">{{ saved_generated_test.title }}</p>
+      <p class="small">Duration: {{ saved_generated_test.duration_minutes }} minutes{% if saved_generated_test.subtopic %} | {{ saved_generated_test.subtopic }}{% endif %}</p>
+      {% if saved_generated_test.latest_attempt %}
+      <p class="small">Latest score: {{ saved_generated_test.latest_attempt.score|int }}/{{ saved_generated_test.latest_attempt.max_score|int }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="suggestion-panel">
+      <div class="card-header">
+        <div>
+          <h2>Low-score AI papers</h2>
+          <p class="small">Saved AI papers below the retake threshold for this subject</p>
+        </div>
+      </div>
+      <div id="suggestion-list" class="suggestion-list"></div>
+      <p id="suggestion-empty" class="small">No saved low-score AI papers for this subject.</p>
+    </div>
   </section>
 
   <section class="card full">
     <div class="card-header">
       <div>
         <h2>Topic mastery</h2>
-        <p class="small">The recommendation engine uses this table to decide what to serve next</p>
+        <p class="small">Adaptive mode uses this table. Randomise mode still leans on it to keep the paper sensible.</p>
       </div>
     </div>
     {% if progress.topics %}
@@ -99,36 +166,54 @@
   </section>
 </div>
 
-{% if questions and test_type == 'subject_mini' and source == 'local' %}
+{% if questions %}
 <section class="card full">
   <div class="card-header">
     <div>
-      <h2>{{ selected_subject }} question set</h2>
-      <p class="small">A more visual paper layout for plotted and high-difficulty items</p>
+      <h2>{% if source == 'openai' %}AI question set{% else %}Question set{% endif %}</h2>
+      <p class="small">{{ selected_subject }} | {{ duration }} minutes | {{ source|upper }}</p>
+    </div>
+    <div class="button-row">
+      {% if question_paper_token %}
+      <form method="post" action="{{ url_for('main.open_question_paper') }}" target="_blank" class="inline-form">
+        <input type="hidden" name="paper_token" value="{{ question_paper_token }}">
+        <button type="submit" class="secondary-button">Open question paper</button>
+      </form>
+      {% endif %}
+      <a class="button secondary" href="{{ download_pdf_url }}">Download paper PDF</a>
     </div>
   </div>
   {% for q in questions %}
   <article class="question-card">
-    <p><strong>{{ loop.index }}.</strong> <span class="badge">{{ q.topic }}</span> Difficulty {{ q.difficulty_level }} | {{ q.marks }} marks</p>
-    <p>{{ q.question }}</p>
-    {% if q.asset_path %}
-    <img class="question-figure" src="{{ url_for('static', filename=q.asset_path) }}" alt="Diagram for question {{ loop.index }}">
+    <p><strong>{{ loop.index }}.</strong> <span class="badge">{{ q.topic }}</span> Difficulty {{ q.difficulty_level }} | {{ q.marks }} marks{% if q.subject and q.subject != selected_subject %} | {{ q.subject }}{% endif %}</p>
+    {% if q.question %}
+    <p>{{ q.question | math_html }}</p>
+    {% endif %}
+    {% if q.asset_url %}
+    {% if q.asset_is_image %}
+    <img class="question-figure" src="{{ q.asset_url }}" alt="Diagram for question {{ loop.index }}">
+    {% else %}
+    <p><a href="{{ q.asset_url }}" target="_blank" rel="noopener noreferrer">Open question reference</a></p>
+    {% endif %}
     {% endif %}
   </article>
   {% endfor %}
 </section>
 {% endif %}
 
-{% if questions and test_type == 'subject_mini' and source == 'local' %}
+{% if questions and test_type == 'subject_mini' %}
 <section class="card full">
   <div class="card-header">
     <div>
       <h2>Record marks after the test</h2>
-      <p class="small">Submitting marks updates difficulty targeting and retires attempted questions by default</p>
+      <p class="small">Local and AI subject papers both feed future recommendations once scores are saved.</p>
     </div>
   </div>
   <form method="post" action="{{ url_for('main.submit_test_results') }}">
     <input type="hidden" name="subject" value="{{ selected_subject }}">
+    {% if generated_test_id %}
+    <input type="hidden" name="generated_test_id" value="{{ generated_test_id }}">
+    {% endif %}
     <table>
       <tr>
         <th>#</th>
@@ -142,7 +227,18 @@
         <td>{{ loop.index }}</td>
         <td>{{ q.topic }}</td>
         <td>{{ q.difficulty_level }}</td>
-        <td>{{ q.question }}</td>
+        <td>
+          {% if q.question %}{{ q.question | math_html }}{% endif %}
+          {% if q.asset_url %}
+          <div>
+            {% if q.asset_is_image %}
+            <img class="question-figure" src="{{ q.asset_url }}" alt="Diagram for marked question {{ loop.index }}">
+            {% else %}
+            <a href="{{ q.asset_url }}" target="_blank" rel="noopener noreferrer">Open question reference</a>
+            {% endif %}
+          </div>
+          {% endif %}
+        </td>
         <td>
           <input type="hidden" name="question_id" value="{{ q.id }}">
           <input type="number" name="score" min="0" max="{{ q.marks }}" step="0.5" value="0">
@@ -163,18 +259,37 @@
   <div class="card-header">
     <div>
       <h2>Wrong-answer review</h2>
-      <p class="small">Explanation, adjacent challenge areas, and video-led follow-up</p>
+      <p class="small">Explanation, follow-up areas, and video-led next steps</p>
     </div>
   </div>
   {% for item in review_items %}
   <article class="review-card">
     <p><strong>{{ loop.index }}.</strong> <span class="badge">{{ item.topic }}</span> Score {{ item.score }}/{{ item.max_score }}</p>
-    <p>{{ item.question }}</p>
-    {% if item.asset_path %}
-    <img class="question-figure" src="{{ url_for('static', filename=item.asset_path) }}" alt="Diagram for reviewed question {{ loop.index }}">
+    {% if item.question %}
+    <p>{{ item.question | math_html }}</p>
     {% endif %}
-    <p><strong>Correct answer:</strong> {{ item.answer }}</p>
-    <p><strong>Explanation:</strong> {{ item.explanation }}</p>
+    {% if item.asset_url %}
+    {% if item.asset_is_image %}
+    <img class="question-figure" src="{{ item.asset_url }}" alt="Diagram for reviewed question {{ loop.index }}">
+    {% else %}
+    <p><a href="{{ item.asset_url }}" target="_blank" rel="noopener noreferrer">Open question reference</a></p>
+    {% endif %}
+    {% endif %}
+    {% if item.answer_asset_url %}
+    {% if item.answer_asset_is_image %}
+    <p><strong>Worked solution:</strong></p>
+    <img class="question-figure" src="{{ item.answer_asset_url }}" alt="Worked answer for reviewed question {{ loop.index }}">
+    {% else %}
+    <p><strong>Worked mark scheme:</strong> <a href="{{ item.answer_asset_url }}" target="_blank" rel="noopener noreferrer">Open answer sheet</a></p>
+    {% endif %}
+    {% endif %}
+    {% if item.answer %}
+    <p><strong>Correct answer:</strong> {{ item.answer | math_html }}</p>
+    {% endif %}
+    <p><strong>Explanation:</strong> {{ item.explanation | math_html }}</p>
+    {% if item.video_url %}
+    <p><strong>Question video:</strong> <a href="{{ item.video_url }}" target="_blank" rel="noopener noreferrer">Watch solution video</a></p>
+    {% endif %}
     <p><strong>Video explanation script:</strong></p>
     <ol>
       {% for step in item.video_script %}
@@ -198,10 +313,83 @@
   <div class="card-header">
     <div>
       <h2>Printable paper view</h2>
-      <p class="small">Markdown export for offline use</p>
+      <p class="small">Stored markdown copy for offline or export use</p>
     </div>
   </div>
   <pre>{{ test_markdown }}</pre>
 </section>
 {% endif %}
+
+<script>
+  (() => {
+    const subjectSelect = document.getElementById("subject-select");
+    const subtopicSelect = document.getElementById("subtopic-select");
+    const subjectSubtopicsMap = {{ subject_subtopics_map | tojson }};
+    const subjectSuggestionMap = {{ subject_suggestion_map | tojson }};
+    const suggestionList = document.getElementById("suggestion-list");
+    const suggestionEmpty = document.getElementById("suggestion-empty");
+
+    if (!subjectSelect || !subtopicSelect) {
+      return;
+    }
+
+    const renderSubtopics = (subject, selectedSubtopic = "") => {
+      const subtopics = subjectSubtopicsMap[subject] || [];
+      const previousValue = selectedSubtopic || subtopicSelect.value || "";
+      subtopicSelect.innerHTML = "";
+
+      const anyOption = document.createElement("option");
+      anyOption.value = "";
+      anyOption.textContent = "Any subtopic";
+      subtopicSelect.appendChild(anyOption);
+
+      for (const subtopic of subtopics) {
+        const option = document.createElement("option");
+        option.value = subtopic;
+        option.textContent = subtopic;
+        if (subtopic === previousValue) {
+          option.selected = true;
+        }
+        subtopicSelect.appendChild(option);
+      }
+
+      if (![...subtopicSelect.options].some((option) => option.value === previousValue)) {
+        subtopicSelect.value = "";
+      }
+    };
+
+    const renderSuggestions = (subject) => {
+      const suggestions = subjectSuggestionMap[subject] || [];
+      suggestionList.innerHTML = "";
+      if (!suggestions.length) {
+        suggestionEmpty.style.display = "block";
+        return;
+      }
+
+      suggestionEmpty.style.display = "none";
+      for (const suggestion of suggestions) {
+        const item = document.createElement("article");
+        item.className = "suggestion-item";
+        item.innerHTML = `
+          <div>
+            <p><strong>${suggestion.title}</strong></p>
+            <p class="small">${suggestion.score_text} (${suggestion.score_percent}%) • ${suggestion.duration_minutes} min${suggestion.subtopic ? ` • ${suggestion.subtopic}` : ""}</p>
+          </div>
+          <div class="button-row">
+            <a class="button secondary" href="${suggestion.view_url}">Open</a>
+            <a class="button secondary" href="${suggestion.pdf_url}">PDF</a>
+          </div>
+        `;
+        suggestionList.appendChild(item);
+      }
+    };
+
+    renderSubtopics(subjectSelect.value, "{{ selected_subtopic }}");
+    renderSuggestions(subjectSelect.value);
+    subjectSelect.addEventListener("change", () => {
+      renderSubtopics(subjectSelect.value, "");
+      renderSuggestions(subjectSelect.value);
+    });
+  })();
+</script>
 {% endblock %}

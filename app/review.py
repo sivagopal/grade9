@@ -1,4 +1,22 @@
-from app.resources import recommend_topic_videos, related_areas_for_topic
+from app.resources import infer_focus_area, recommend_topic_videos, related_areas_for_topic
+
+
+def _display_answer_text(answer_text, answer_asset_path=None):
+    text = str(answer_text or "").strip()
+    if not text:
+        return ""
+    if answer_asset_path:
+        normalized = " ".join(text.lower().split())
+        if normalized in {
+            "see the worked mark scheme.",
+            "see the worked mark scheme",
+            "see worked mark scheme.",
+            "see worked mark scheme",
+            "see the worked method.",
+            "see the worked method",
+        }:
+            return ""
+    return text
 
 
 def build_wrong_answer_review(subject, questions, score_map):
@@ -11,19 +29,28 @@ def build_wrong_answer_review(subject, questions, score_map):
         max_score = float(question["marks"])
         if score >= max_score:
             continue
+        focus_label = infer_focus_area(
+            subject,
+            question["topic"],
+            question.get("subtopic", ""),
+            question.get("question", ""),
+        )
         reviews.append(
             {
                 "question_id": question["id"],
                 "topic": question["topic"],
+                "focus_label": focus_label,
                 "question": question["question"],
                 "asset_path": question.get("asset_path"),
+                "answer_asset_path": question.get("answer_asset_path"),
                 "score": score,
                 "max_score": max_score,
-                "answer": question["answer"],
+                "answer": _display_answer_text(question["answer"], question.get("answer_asset_path")),
                 "explanation": question.get("explanation") or _fallback_explanation(question),
+                "video_url": question.get("video_url"),
                 "video_script": _build_video_script(question),
-                "videos": recommend_topic_videos(subject, question["topic"]),
-                "related_areas": related_areas_for_topic(question["topic"]),
+                "videos": recommend_topic_videos(subject, focus_label),
+                "related_areas": related_areas_for_topic(focus_label),
             }
         )
     return reviews

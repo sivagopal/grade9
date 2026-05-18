@@ -2,33 +2,166 @@
 {% block title %}Report | GCSE Grade 9 Planner{% endblock %}
 {% block content %}
 <section class="page-hero">
-  <div class="eyebrow">Narrative Summary</div>
-  <h1>Turn the raw data into a readable coaching report.</h1>
-  <p>Export or email the latest progress narrative so the planner can be reviewed like a serious academic dashboard rather than a loose collection of notes.</p>
-</section>
-
-<section class="card full">
-  <div class="card-header">
-    <div>
-      <h2>Actions</h2>
-      <p class="small">Share or archive the latest report</p>
+  <div class="eyebrow">Performance Report</div>
+  <h1>See each subject's position against the Grade 9 target.</h1>
+  <p>The report now ranks subjects as a pyramid, places them on a GCSE Grade 9 target curve, and tracks the score datapoints that are moving up or stalling.</p>
+  <div class="hero-metrics">
+    <div class="hero-metric">
+      <span class="hero-metric-label">Trajectory</span>
+      <span class="hero-metric-value">{{ analysis.trajectory.score }}/100</span>
+    </div>
+    <div class="hero-metric">
+      <span class="hero-metric-label">Avg paper score</span>
+      <span class="hero-metric-value">{% if analysis.metrics.avg_test_score is not none %}{{ analysis.metrics.avg_test_score|round|int }}%{% else %}--{% endif %}</span>
+    </div>
+    <div class="hero-metric">
+      <span class="hero-metric-label">Scored subjects</span>
+      <span class="hero-metric-value">{{ analysis.improvement_rows|length }}</span>
     </div>
   </div>
-  <div class="button-row">
-    <a class="button" href="{{ url_for('main.download_report') }}">Download report</a>
-    <form method="post" action="{{ url_for('main.email_report') }}" class="inline-form">
-      <button type="submit">Email report to kranthiksg@gmail.com</button>
-    </form>
-  </div>
 </section>
 
-<section class="card full">
-  <div class="card-header">
-    <div>
-      <h2>Report output</h2>
-      <p class="small">Generated plain-text summary</p>
+<div class="grid">
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Actions</h2>
+        <p class="small">Share or archive the latest report</p>
+      </div>
     </div>
-  </div>
-  <pre>{{ report }}</pre>
-</section>
+    <div class="button-row">
+      <a class="button" href="{{ url_for('main.download_report') }}">Download report</a>
+      <form method="post" action="{{ url_for('main.email_report') }}" class="inline-form">
+        <button type="submit">Email report to kranthiksg@gmail.com</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="card wide">
+    <div class="card-header">
+      <div>
+        <h2>Subject pyramid</h2>
+        <p class="small">Top of the pyramid is closest to a secure Grade 9 path</p>
+      </div>
+    </div>
+    <div class="pyramid-layout">
+      {% for tier in analysis.subject_pyramid %}
+      <div class="pyramid-tier pyramid-tier-{{ loop.index }}">
+        <div class="pyramid-tier-meta">
+          <span class="badge">{{ tier.label }}</span>
+          <span class="small">{{ tier.description }}</span>
+        </div>
+        <div class="pyramid-tier-subjects">
+          {% for row in tier.subjects %}
+          <div class="pyramid-subject">
+            <strong>{{ row.subject }}</strong>
+            <span>{{ row.score_label }}</span>
+            <small>{{ row.gap_label }}</small>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card narrow">
+    <div class="card-header">
+      <div>
+        <h2>Report summary</h2>
+        <p class="small">Current reading from the last logged period</p>
+      </div>
+    </div>
+    <p class="muted-block">{{ analysis.summary }}</p>
+    <div class="pill-list">
+      {% for subject in analysis.priority_subjects %}
+      <span>{{ subject }}</span>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>GCSE Grade 9 normal curve</h2>
+        <p class="small">Markers show each subject's latest recorded score, with the Grade 9 target fixed at {{ analysis.grade9_curve.target_score }}%</p>
+      </div>
+    </div>
+    <div class="curve-shell">
+      <div class="curve-axis curve-axis-left">0</div>
+      <div class="curve-axis curve-axis-right">100</div>
+      <div class="curve-target-line" style="left: {{ analysis.grade9_curve.target_score }}%;">
+        <span>Grade 9 target</span>
+      </div>
+      <div class="curve-hill"></div>
+      {% for marker in analysis.grade9_curve.markers %}
+      <div class="curve-marker{% if marker.is_estimate %} estimate{% endif %}" style="left: {{ marker.position }}%; bottom: {{ marker.height }}px;">
+        <div class="curve-marker-dot"></div>
+        <div class="curve-marker-label">
+          <strong>{{ marker.short_subject }}</strong>
+          <span>{% if marker.score is not none %}{{ marker.score }}%{% else %}est {{ marker.display_score }}{% endif %}</span>
+        </div>
+      </div>
+      {% endfor %}
+      <div class="curve-band-row">
+        {% for band in analysis.grade9_curve.bands %}
+        <div class="curve-band">
+          <strong>{{ band.label }}</strong>
+          <span>{{ band.range_label }}</span>
+          <small>{{ band.count }} subject{% if band.count != 1 %}s{% endif %}</small>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Improvement datapoints</h2>
+        <p class="small">Recent score movement, current gap to Grade 9, and the score sequence behind each subject</p>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Subject</th>
+          <th>Latest</th>
+          <th>Trend</th>
+          <th>Gap</th>
+          <th>Datapoints</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in analysis.subject_performance %}
+        <tr>
+          <td>
+            <strong>{{ row.subject }}</strong><br>
+            <span class="small">{{ row.score_band }}</span>
+          </td>
+          <td>{{ row.score_label }}</td>
+          <td>
+            {{ row.trend_text }}
+            {% if row.baseline_delta is not none %}
+            <div class="small">Net {{ row.baseline_delta }} pts from first score</div>
+            {% endif %}
+          </td>
+          <td>{{ row.gap_label }}</td>
+          <td>{{ row.history_text }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card full">
+    <div class="card-header">
+      <div>
+        <h2>Report output</h2>
+        <p class="small">Generated plain-text summary</p>
+      </div>
+    </div>
+    <pre>{{ report }}</pre>
+  </section>
+</div>
 {% endblock %}

@@ -2,6 +2,225 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from app.config import SUBJECTS, STEM_SUBJECTS
 
+GRADE9_TARGET_SCORE = 90
+NORMAL_CURVE_MEAN = 65
+NORMAL_CURVE_SPREAD = 18
+
+
+def _clamp(value, minimum, maximum):
+    return max(minimum, min(maximum, value))
+
+
+def _short_subject_label(subject):
+    overrides = {
+        "English Literature": "Eng Lit",
+        "Business Studies": "Business",
+        "Computing / 12th Subject": "Computing",
+        "Further Maths": "Further Maths",
+    }
+    if subject in overrides:
+        return overrides[subject]
+    if len(subject) <= 12:
+        return subject
+    words = [part for part in subject.replace("/", " ").split() if part]
+    if len(words) >= 2:
+        return " ".join(words[:2])
+    return subject[:12]
+
+
+def _score_band(score):
+    if score is None:
+        return "No score yet"
+    if score >= GRADE9_TARGET_SCORE:
+        return "Grade 9 zone"
+    if score >= 80:
+        return "Close to target"
+    if score >= 65:
+        return "Secure but below 9"
+    if score >= 50:
+        return "Developing"
+    return "Needs recovery"
+
+
+def _trend_text(delta):
+    if delta is None:
+        return "No prior datapoint"
+    if delta > 0:
+        return f"Up {delta:.0f} pts"
+    if delta < 0:
+        return f"Down {abs(delta):.0f} pts"
+    return "Flat"
+
+
+def _gaussian_height(score, mean=NORMAL_CURVE_MEAN, spread=NORMAL_CURVE_SPREAD):
+    if score is None:
+        return 0.0
+    exponent = -0.5 * (((score - mean) / spread) ** 2)
+    return 2.718281828 ** exponent
+
+
+def _build_subject_performance(subjects, subject_logs, stem_subjects):
+    by_subject = defaultdict(list)
+    for row in subject_logs:
+        by_subject[row["subject"]].append(row)
+
+    subject_rows = []
+    for subject in subjects:
+        rows = sorted(
+            by_subject.get(subject, []),
+            key=lambda row: (row.get("log_date", ""), row.get("id", 0)),
+        )
+        score_points = []
+        for row in rows:
+            if row.get("test_score") is None:
+                continue
+            score_points.append({
+                "date": row["log_date"],
+                "score": float(row["test_score"]),
+            })
+
+        avg_confidence = (
+            sum(float(row.get("confidence", 3) or 3) for row in rows) / len(rows)
+            if rows
+            else 3.0
+        )
+        total_minutes = sum(int(row.get("study_minutes", 0) or 0) for row in rows)
+        latest_score = round(score_points[-1]["score"]) if score_points else None
+        first_score = round(score_points[0]["score"]) if score_points else None
+        previous_score = round(score_points[-2]["score"]) if len(score_points) >= 2 else None
+        baseline_delta = (
+            round(latest_score - first_score)
+            if latest_score is not None and first_score is not None and len(score_points) >= 2
+            else None
+        )
+        recent_delta = (
+            round(latest_score - previous_score)
+            if latest_score is not None and previous_score is not None
+            else None
+        )
+        confidence_component = (avg_confidence / 5) * 18
+        minutes_component = min(total_minutes, 120) / 120 * 12
+        score_component = latest_score * 0.7 if latest_score is not None else 28
+        readiness_score = round(_clamp(score_component + confidence_component + minutes_component, 0, 100))
+        display_score = latest_score if latest_score is not None else readiness_score
+        gap_to_target = (
+            max(0, GRADE9_TARGET_SCORE - latest_score)
+            if latest_score is not None
+            else None
+        )
+        curve_height = 16 + (_gaussian_height(display_score) * 56)
+        point_labels = [f"{int(point['score'])}% ({point['date'][5:]})" for point in score_points[-4:]]
+        history_text = " -> ".join(point_labels) if point_labels else "No recorded paper scores yet"
+
+        subject_rows.append({
+            "subject": subject,
+            "short_subject": _short_subject_label(subject),
+            "is_stem": subject in stem_subjects,
+            "score": latest_score,
+            "display_score": display_score,
+            "score_label": f"{latest_score}%" if latest_score is not None else "No score yet",
+            "score_band": _score_band(latest_score),
+            "gap_to_target": gap_to_target,
+            "gap_label": f"{gap_to_target} pts to Grade 9" if gap_to_target is not None else "Need a scored paper",
+            "avg_confidence": round(avg_confidence, 1),
+            "total_minutes": total_minutes,
+            "readiness_score": readiness_score,
+            "recent_delta": recent_delta,
+            "baseline_delta": baseline_delta,
+            "trend_text": _trend_text(recent_delta if recent_delta is not None else baseline_delta),
+            "history_text": history_text,
+            "score_points": score_points,
+            "curve_position": _clamp(display_score, 0, 100),
+            "curve_height": round(curve_height, 1),
+            "is_estimate": latest_score is None,
+        })
+
+    subject_rows.sort(
+        key=lambda row: (
+            row["readiness_score"],
+            row["score"] if row["score"] is not None else -1,
+            row["avg_confidence"],
+        ),
+        reverse=True,
+    )
+    return subject_rows
+
+
+def _build_subject_pyramid(subject_rows):
+    tiers = [
+        ("Apex", "Closest subjects to a secure Grade 9 track.", 1),
+        ("Strong", "Subjects that are within reach with steady gains.", 2),
+        ("Building", "Subjects that need consistent lift over the next cycle.", 3),
+        ("Recovery", "Subjects needing the most score movement.", max(0, len(subject_rows) - 6)),
+    ]
+    pyramid = []
+    index = 0
+    for label, description, count in tiers:
+        if count <= 0:
+            continue
+        tier_subjects = subject_rows[index:index + count]
+        if not tier_subjects:
+            continue
+        pyramid.append({
+            "label": label,
+            "description": description,
+            "subjects": tier_subjects,
+        })
+        index += count
+    return pyramid
+
+
+def _build_grade9_curve(subject_rows):
+    bands = [
+        {"label": "Recovery", "range_label": "0-49%", "minimum": 0, "maximum": 49},
+        {"label": "Developing", "range_label": "50-64%", "minimum": 50, "maximum": 64},
+        {"label": "Secure", "range_label": "65-79%", "minimum": 65, "maximum": 79},
+        {"label": "Grade 8 edge", "range_label": "80-89%", "minimum": 80, "maximum": 89},
+        {"label": "Grade 9 target", "range_label": "90-100%", "minimum": 90, "maximum": 100},
+    ]
+    for band in bands:
+        band_subjects = [
+            row["short_subject"]
+            for row in subject_rows
+            if row["score"] is not None and band["minimum"] <= row["score"] <= band["maximum"]
+        ]
+        band["subjects"] = band_subjects
+        band["count"] = len(band_subjects)
+
+    markers = [
+        {
+            "subject": row["subject"],
+            "short_subject": row["short_subject"],
+            "score": row["score"],
+            "display_score": row["display_score"],
+            "position": row["curve_position"],
+            "height": row["curve_height"],
+            "is_estimate": row["is_estimate"],
+            "gap_label": row["gap_label"],
+            "trend_text": row["trend_text"],
+        }
+        for row in subject_rows
+    ]
+    return {
+        "target_score": GRADE9_TARGET_SCORE,
+        "mean_score": NORMAL_CURVE_MEAN,
+        "bands": bands,
+        "markers": markers,
+    }
+
+
+def _build_improvement_snapshot(subject_rows):
+    rows = [row for row in subject_rows if row["score_points"]]
+    rows.sort(
+        key=lambda row: (
+            row["baseline_delta"] if row["baseline_delta"] is not None else -999,
+            row["recent_delta"] if row["recent_delta"] is not None else -999,
+            row["score"] if row["score"] is not None else -1,
+        ),
+        reverse=True,
+    )
+    return rows
+
 def default_daily_targets():
     return [
         "Complete homework before extra revision.",
@@ -24,7 +243,9 @@ def daily_targets_from_score(score):
         targets.append("Teach one concept aloud to prove mastery.")
     return targets
 
-def estimate_grade9_trajectory(daily_logs, subject_logs):
+def estimate_grade9_trajectory(daily_logs, subject_logs, subjects=None, stem_subjects=None):
+    subjects = subjects or SUBJECTS
+    stem_subjects = set(stem_subjects or STEM_SUBJECTS)
     if not daily_logs:
         return {
             "score": 50,
@@ -51,8 +272,8 @@ def estimate_grade9_trajectory(daily_logs, subject_logs):
         if row.get("test_score") is not None:
             subject_scores[row["subject"]].append(row["test_score"])
 
-    subjects_touched = len([s for s in SUBJECTS if subject_minutes.get(s, 0) > 0])
-    stem_minutes = sum(subject_minutes.get(s, 0) for s in STEM_SUBJECTS)
+    subjects_touched = len([s for s in subjects if subject_minutes.get(s, 0) > 0])
+    stem_minutes = sum(subject_minutes.get(s, 0) for s in stem_subjects)
     total_subject_minutes = sum(subject_minutes.values()) or 1
     stem_ratio = stem_minutes / total_subject_minutes
 
@@ -94,17 +315,30 @@ def estimate_grade9_trajectory(daily_logs, subject_logs):
         "daily_targets": daily_targets_from_score(score),
     }
 
-def analyse_week(daily_logs, subject_logs):
-    trajectory = estimate_grade9_trajectory(daily_logs, subject_logs)
+def analyse_week(daily_logs, subject_logs, subjects=None, stem_subjects=None):
+    subjects = subjects or SUBJECTS
+    stem_subjects = set(stem_subjects or STEM_SUBJECTS)
+    trajectory = estimate_grade9_trajectory(daily_logs, subject_logs, subjects=subjects, stem_subjects=stem_subjects)
+    subject_performance = _build_subject_performance(subjects, subject_logs, stem_subjects)
+    subject_pyramid = _build_subject_pyramid(subject_performance)
+    grade9_curve = _build_grade9_curve(subject_performance)
+    improvement_rows = _build_improvement_snapshot(subject_performance)
 
     if not daily_logs:
+        fallback_priorities = [subject for subject in ["Maths", "Science", "Biology", "Further Maths"] if subject in subjects]
         return {
             "summary": "No logs yet. Start by recording today honestly.",
-            "weak_subjects": ["Maths", "Science", "Biology", "Further Maths"],
-            "priority_subjects": ["Maths", "Science", "Biology", "Further Maths"],
+            "weak_subjects": fallback_priorities or list(subjects[:4]),
+            "priority_subjects": fallback_priorities or list(subjects[:4]),
             "warnings": ["Log at least 5 days for stronger recommendations."],
             "metrics": {},
             "trajectory": trajectory,
+            "subjects": list(subjects),
+            "stem_subjects": sorted(stem_subjects),
+            "subject_performance": subject_performance,
+            "subject_pyramid": subject_pyramid,
+            "grade9_curve": grade9_curve,
+            "improvement_rows": improvement_rows,
         }
 
     total_revision = sum(x["revision_minutes"] for x in daily_logs)
@@ -119,12 +353,15 @@ def analyse_week(daily_logs, subject_logs):
         subject_minutes[row["subject"]] += row["study_minutes"]
         subject_conf[row["subject"]].append(row["confidence"])
 
+    all_scores = [row["test_score"] for row in subject_logs if row.get("test_score") is not None]
+    avg_test_score = sum(all_scores) / len(all_scores) if all_scores else None
+
     weakness_scores = {}
-    for subject in SUBJECTS:
+    for subject in subjects:
         minutes = subject_minutes.get(subject, 0)
         confs = subject_conf.get(subject, [3])
         avg_conf = sum(confs) / len(confs)
-        stem_boost = 1.4 if subject in STEM_SUBJECTS else 1.0
+        stem_boost = 1.4 if subject in stem_subjects else 1.0
         weakness_scores[subject] = ((6 - avg_conf) * 25 + max(0, 90 - minutes)) * stem_boost
 
     weak_subjects = sorted(weakness_scores, key=weakness_scores.get, reverse=True)[:5]
@@ -143,8 +380,13 @@ def analyse_week(daily_logs, subject_logs):
         f"Recent average sleep: {avg_sleep:.1f}h. "
         f"Average focus: {avg_focus:.1f}/5. "
         f"Recent revision: {total_revision} minutes. "
-        f"Main priorities: {', '.join(weak_subjects[:3])}. "
-        f"Grade 9 trajectory: {trajectory['status']} ({trajectory['score']}/100)."
+        + (
+            f"Recent recorded paper average: {avg_test_score:.0f}%. "
+            if avg_test_score is not None
+            else ""
+        )
+        + f"Main priorities: {', '.join(weak_subjects[:3])}. "
+        + f"Grade 9 trajectory: {trajectory['status']} ({trajectory['score']}/100)."
     )
 
     return {
@@ -157,8 +399,15 @@ def analyse_week(daily_logs, subject_logs):
             "avg_focus": round(avg_focus, 1),
             "total_revision": total_revision,
             "total_distractions": total_distractions,
+            "avg_test_score": round(avg_test_score, 1) if avg_test_score is not None else None,
         },
         "trajectory": trajectory,
+        "subjects": list(subjects),
+        "stem_subjects": sorted(stem_subjects),
+        "subject_performance": subject_performance,
+        "subject_pyramid": subject_pyramid,
+        "grade9_curve": grade9_curve,
+        "improvement_rows": improvement_rows,
     }
 
 def next_day_name(log_date=None):
@@ -170,8 +419,9 @@ def next_day_name(log_date=None):
 
 def generate_next_day_timetable(analysis, day_name):
     priorities = analysis["priority_subjects"]
-    stem = [s for s in priorities if s in STEM_SUBJECTS]
-    non_stem = [s for s in priorities if s not in STEM_SUBJECTS]
+    stem_subjects = set(analysis.get("stem_subjects", STEM_SUBJECTS))
+    stem = [s for s in priorities if s in stem_subjects]
+    non_stem = [s for s in priorities if s not in stem_subjects]
     ordered = (stem + non_stem + ["English", "German", "French"])[:5]
 
     timetable = [
