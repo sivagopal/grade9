@@ -34,7 +34,7 @@ http://127.0.0.1:5001
 - Generate performance-based ChatGPT prompts for topic-wise bulk question creation
 - Daily prompt poller that queues fresh prompt jobs from the latest test results
 - Weak-area resource recommendations
-- Email daily report to `kranthiksg@gmail.com`
+- Email daily report to `test@test.com`
 - Optional ChatGPT/OpenAI test generation and scanned-answer marking
 - Matplotlib-backed on-the-fly diagram rendering from stored question data
 - Canonical Year 8 maths subtopic selector for targeted mini tests
